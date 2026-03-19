@@ -158,58 +158,73 @@ static void* manage_light(void* arg)
 // different movements require different sets of quadrants.
 static void lock_path(Side side, Direction direction)
 {
-  if (side == NORTH) // car enters from north side 
+  /*
+   * Conflict regions:
+   * q0 = north-west
+   * q1 = north-east
+   * q2 = south-east
+   * q3 = south-west
+   *
+   * Supported movements in this intersection:
+   * NORTH:  STRAIGHT, RIGHT
+   * SOUTH:  LEFT, STRAIGHT
+   * EAST:   LEFT, STRAIGHT, RIGHT
+   * WEST:   LEFT, RIGHT
+   *
+   * Locks are always taken in increasing order to avoid deadlock.
+   */
+
+  if (side == NORTH)
   {
-    if (direction == RIGHT)           { lock_region(1); } // minimal path only needs quadrant one
-    else if (direction == STRAIGHT)   { lock_region(1); lock_region(2); } // going striaght passes thru 2 quadrants
-    else                              { lock_region(1); lock_region(2); lock_region(3); } // left turn is the longest path - 3 quadrants
+    if (direction == STRAIGHT)        { lock_region(1); lock_region(2); }
+    else if (direction == RIGHT)      { lock_region(0); }
+    else                              { lock_region(0); lock_region(1); lock_region(2); lock_region(3); } /* unsupported */
   }
-  else if (side == EAST) // car enters from east side
+  else if (side == EAST)
   {
-    if (direction == RIGHT)           { lock_region(2); } // right turn only needs quadrant two
-    else if (direction == STRAIGHT)   { lock_region(2); lock_region(3); } // straight movement passes 2 quadrants
-    else                              { lock_region(0); lock_region(2); lock_region(3); } // left turn uses 3 quadrants
+    if (direction == LEFT)            { lock_region(2); lock_region(3); }   /* east -> south */
+    else if (direction == STRAIGHT)   { lock_region(0); lock_region(1); }   /* east -> west */
+    else if (direction == RIGHT)      { lock_region(1); }                    /* east -> north */
   }
-  else if (side == SOUTH) // car enters from south side
+  else if (side == SOUTH)
   {
-    if (direction == RIGHT)           { lock_region(3); } // only needs quadrant 3
-    else if (direction == STRAIGHT)   { lock_region(2); } // only needs quadrant 2
-    else                              { lock_region(1); } // only needs quadrant 1
+    if (direction == LEFT)            { lock_region(0); lock_region(3); }   /* south -> west */
+    else if (direction == STRAIGHT)   { lock_region(1); lock_region(2); }   /* south -> north */
+    else                              { lock_region(0); lock_region(1); lock_region(2); lock_region(3); } /* unsupported */
   }
-  else if (side == WEST) // car enters from west side
+  else if (side == WEST)
   {
-    if (direction == RIGHT)           { lock_region(0); } // right turn only quadrant 0
-    else if (direction == STRAIGHT)   { lock_region(0); lock_region(1); } // straight movement passes 2 quadrants
-    else                              { lock_region(0); lock_region(1); lock_region(2); } // left turn uses 3 quadrants
+    if (direction == LEFT)            { lock_region(0); lock_region(1); }   /* west -> north */
+    else if (direction == RIGHT)      { lock_region(3); }                    /* west -> south */
+    else                              { lock_region(0); lock_region(1); lock_region(2); lock_region(3); } /* unsupported */
   }
 }
 
-// unlocks the quadrants in reverse order after the car leaves the intersection.
 static void unlock_path(Side side, Direction direction)
 {
-  if (side == NORTH) // car came from north 
+  if (side == NORTH)
   {
-    if (direction == RIGHT)           { unlock_region(1); } // release quadrant 1 
-    else if (direction == STRAIGHT)   { unlock_region(2); unlock_region(1); } // unlock in reverse order (was 1->2 mow 2->1)
-    else                              { unlock_region(3); unlock_region(2); unlock_region(1); } // release all used quadrants in reverse order
+    if (direction == STRAIGHT)        { unlock_region(2); unlock_region(1); }
+    else if (direction == RIGHT)      { unlock_region(0); }
+    else                              { unlock_region(3); unlock_region(2); unlock_region(1); unlock_region(0); }
   }
-  else if (side == EAST) // car came from east
+  else if (side == EAST)
   {
-    if (direction == RIGHT)           { unlock_region(2); } // release quadrant 2
-    else if (direction == STRAIGHT)   { unlock_region(3); unlock_region(2); } // unlock in reverse order
-    else                              { unlock_region(3); unlock_region(2); unlock_region(0); } // release all
+    if (direction == LEFT)            { unlock_region(3); unlock_region(2); }
+    else if (direction == STRAIGHT)   { unlock_region(1); unlock_region(0); }
+    else if (direction == RIGHT)      { unlock_region(1); }
   }
-  else if (side == SOUTH) // car came from south
+  else if (side == SOUTH)
   {
-    if (direction == RIGHT)           { unlock_region(3); } // release quadrant 3
-    else if (direction == STRAIGHT)   { unlock_region(2); } // release quadrant 2
-    else                              { unlock_region(1); } // release quadrant 1
+    if (direction == LEFT)            { unlock_region(3); unlock_region(0); }
+    else if (direction == STRAIGHT)   { unlock_region(2); unlock_region(1); }
+    else                              { unlock_region(3); unlock_region(2); unlock_region(1); unlock_region(0); }
   }
-  else if (side == WEST) // car came from west
+  else if (side == WEST)
   {
-    if (direction == RIGHT)           { unlock_region(0); } // release quadrant 0
-    else if (direction == STRAIGHT)   { unlock_region(1); unlock_region(0); } // unlock in reverse order
-    else                              { unlock_region(2); unlock_region(1); unlock_region(0); } // release all
+    if (direction == LEFT)            { unlock_region(1); unlock_region(0); }
+    else if (direction == RIGHT)      { unlock_region(3); }
+    else                              { unlock_region(3); unlock_region(2); unlock_region(1); unlock_region(0); }
   }
 }
 // all quadrants are unlocked in reverse order of locking to maintain consistency and avoid potential synchronization issues
