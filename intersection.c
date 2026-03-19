@@ -29,10 +29,18 @@ static Arrival curr_arrivals[4][3][20];
  */
 static sem_t semaphores[4][3];
 
-// one mutex for each conflict region inside the intersection
-static pthread_mutex_t region_mutex[4];
+/*
+ * region_mutex[]
+ *
+ * Mutexes for the conflict regions inside the intersection
+ */
+static pthread_mutex_t region_mutex[9];
 
-// store the side and direction assigned to one traffic light
+/*
+ * LightArgs
+ *
+ * Stores the side and direction assigned to one traffic light thread
+ */
 typedef struct {
   Side side;
   Direction direction;
@@ -41,7 +49,18 @@ typedef struct {
 /*
  * get_path_regions(side, direction, regions, count)
  *
- * Determines which conflict regions are used by a car path
+ * Determines which conflict regions are used by a car path.
+ *
+ * Region layout:
+ *   0 = north-west corner
+ *   1 = north-east corner
+ *   2 = south-east corner
+ *   3 = south-west corner
+ *   4 = north/south upper strip
+ *   5 = east/west right strip
+ *   6 = north/south lower strip
+ *   7 = east/west left strip
+ *   8 = center crossing region
  */
 static void get_path_regions(Side side, Direction direction, int regions[], int *count)
 {
@@ -56,15 +75,15 @@ static void get_path_regions(Side side, Direction direction, int regions[], int 
     }
     else if (direction == STRAIGHT)
     {
-      regions[0] = 1;
-      regions[1] = 2;
+      regions[0] = 4;
+      regions[1] = 8;
       *count = 2;
     }
-    else
+    else 
     {
-      regions[0] = 1;
-      regions[1] = 2;
-      regions[2] = 3;
+      regions[0] = 4;
+      regions[1] = 5;
+      regions[2] = 8;
       *count = 3;
     }
   }
@@ -77,15 +96,15 @@ static void get_path_regions(Side side, Direction direction, int regions[], int 
     }
     else if (direction == STRAIGHT)
     {
-      regions[0] = 2;
-      regions[1] = 3;
+      regions[0] = 5;
+      regions[1] = 8;
       *count = 2;
     }
-    else
+    else 
     {
-      regions[0] = 0;
-      regions[1] = 2;
-      regions[2] = 3;
+      regions[0] = 5;
+      regions[1] = 6;
+      regions[2] = 8;
       *count = 3;
     }
   }
@@ -98,15 +117,15 @@ static void get_path_regions(Side side, Direction direction, int regions[], int 
     }
     else if (direction == STRAIGHT)
     {
-      regions[0] = 0;
-      regions[1] = 3;
+      regions[0] = 6;
+      regions[1] = 8;
       *count = 2;
     }
     else
     {
-      regions[0] = 0;
-      regions[1] = 1;
-      regions[2] = 3;
+      regions[0] = 6;
+      regions[1] = 7;
+      regions[2] = 8;
       *count = 3;
     }
   }
@@ -119,15 +138,15 @@ static void get_path_regions(Side side, Direction direction, int regions[], int 
     }
     else if (direction == STRAIGHT)
     {
-      regions[0] = 0;
-      regions[1] = 1;
+      regions[0] = 7;
+      regions[1] = 8;
       *count = 2;
     }
-    else
+    else 
     {
-      regions[0] = 0;
-      regions[1] = 1;
-      regions[2] = 2;
+      regions[0] = 7;
+      regions[1] = 4;
+      regions[2] = 8;
       *count = 3;
     }
   }
@@ -184,7 +203,7 @@ static void* supply_arrivals(void *arg)
   int num_curr_arrivals[4][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
 
   // for every arrival in the list
-  for (int i = 0; i < sizeof(input_arrivals) / sizeof(Arrival); i++)
+  for (int i = 0; i < (int)(sizeof(input_arrivals) / sizeof(Arrival)); i++)
   {
     // get the next arrival in the list
     Arrival arrival = input_arrivals[i];
@@ -199,21 +218,6 @@ static void* supply_arrivals(void *arg)
     // increment the semaphore for the traffic light that the arrival is for
     sem_post(&semaphores[arrival.side][arrival.direction]);
   }
-
-  // add one termination marker per lane and wake each traffic light once more
-  for (int i = 0; i < 4; i++)
-  {
-    for (int j = 0; j < 3; j++)
-    {
-      curr_arrivals[i][j][num_curr_arrivals[i][j]].id = -1;
-      curr_arrivals[i][j][num_curr_arrivals[i][j]].side = (Side) i;
-      curr_arrivals[i][j][num_curr_arrivals[i][j]].direction = (Direction) j;
-      curr_arrivals[i][j][num_curr_arrivals[i][j]].time = END_TIME;
-
-      sem_post(&semaphores[i][j]);
-    }
-  }
-
   return 0;
 }
 
@@ -248,21 +252,21 @@ static void* manage_light(void* arg)
     }
 
     // lock all intersection regions needed for this car's path
-    lock_regions(side, direction);
+    lock_regions(arrival.side, arrival.direction);
 
     // allow the car to enter the intersection
     printf("traffic light %d %d turns green at time %d for car %d\n",
-           side, direction, get_time_passed(), arrival.id);
+           arrival.side, arrival.direction, get_time_passed(), arrival.id);
 
     // let the car cross the intersection
     sleep(CROSS_TIME);
 
     // turn the traffic light red again
     printf("traffic light %d %d turns red at time %d\n",
-           side, direction, get_time_passed());
+           arrival.side, arrival.direction, get_time_passed());
 
     // unlock the intersection regions used by the car
-    unlock_regions(side, direction);
+    unlock_regions(arrival.side, arrival.direction);
   }
 
   return 0;
@@ -287,7 +291,7 @@ int main(int argc, char * argv[])
   }
 
   // create mutexes for the conflict regions
-  for (int i = 0; i < 4; i++)
+  for (int i = 0; i < 9; i++)
   {
     pthread_mutex_init(&region_mutex[i], NULL);
   }
@@ -309,8 +313,36 @@ int main(int argc, char * argv[])
   // create a thread that executes supply_arrivals
   pthread_create(&supplier_thread, NULL, supply_arrivals, NULL);
 
-  // wait for the arrival-supplier thread to finish
+  // wait for the supplier thread to finish
   pthread_join(supplier_thread, NULL);
+
+  // wait until END_TIME before terminating the traffic light threads
+  if (get_time_passed() < END_TIME)
+  {
+    sleep(END_TIME - get_time_passed());
+  }
+
+  // count how many arrivals each lane received
+  int lane_counts[4][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+
+  for (int i = 0; i < (int)(sizeof(input_arrivals) / sizeof(Arrival)); i++)
+  {
+    lane_counts[input_arrivals[i].side][input_arrivals[i].direction]++;
+  }
+
+  // add one termination marker per lane and wake each traffic light once more
+  for (int i = 0; i < 4; i++)
+  {
+    for (int j = 0; j < 3; j++)
+    {
+      curr_arrivals[i][j][lane_counts[i][j]].id = -1;
+      curr_arrivals[i][j][lane_counts[i][j]].side = (Side) i;
+      curr_arrivals[i][j][lane_counts[i][j]].direction = (Direction) j;
+      curr_arrivals[i][j][lane_counts[i][j]].time = END_TIME;
+
+      sem_post(&semaphores[i][j]);
+    }
+  }
 
   // wait until all traffic light threads have finished
   for (int i = 0; i < 4; i++)
@@ -322,7 +354,7 @@ int main(int argc, char * argv[])
   }
 
   // destroy mutexes
-  for (int i = 0; i < 4; i++)
+  for (int i = 0; i < 9; i++)
   {
     pthread_mutex_destroy(&region_mutex[i]);
   }
