@@ -153,31 +153,31 @@ static void* manage_light(void* arg)
   return(0);
 }
 
-static void lock_path(Side side, Direction direction)
+sstatic void lock_path(Side side, Direction direction)
 {
   if (side == NORTH)
   {
     if (direction == RIGHT)           { lock_region(1); }
     else if (direction == STRAIGHT)   { lock_region(1); lock_region(2); }
-    else                             { lock_region(1); lock_region(2); lock_region(3); }
+    else                              { lock_region(1); lock_region(2); lock_region(3); }
   }
   else if (side == EAST)
   {
     if (direction == RIGHT)           { lock_region(2); }
     else if (direction == STRAIGHT)   { lock_region(2); lock_region(3); }
-    else                             { lock_region(2); lock_region(3); lock_region(0); }
+    else                              { lock_region(0); lock_region(2); lock_region(3); }
   }
   else if (side == SOUTH)
   {
     if (direction == RIGHT)           { lock_region(3); }
-    else if (direction == STRAIGHT)   { lock_region(2); }        // FIX
-    else                             { lock_region(1); }        // FIX
+    else if (direction == STRAIGHT)   { lock_region(2); }
+    else                              { lock_region(1); }
   }
   else if (side == WEST)
   {
     if (direction == RIGHT)           { lock_region(0); }
     else if (direction == STRAIGHT)   { lock_region(0); lock_region(1); }
-    else                             { lock_region(0); lock_region(1); lock_region(2); }
+    else                              { lock_region(0); lock_region(1); lock_region(2); }
   }
 }
 
@@ -187,25 +187,25 @@ static void unlock_path(Side side, Direction direction)
   {
     if (direction == RIGHT)           { unlock_region(1); }
     else if (direction == STRAIGHT)   { unlock_region(2); unlock_region(1); }
-    else                             { unlock_region(3); unlock_region(2); unlock_region(1); }
+    else                              { unlock_region(3); unlock_region(2); unlock_region(1); }
   }
   else if (side == EAST)
   {
     if (direction == RIGHT)           { unlock_region(2); }
     else if (direction == STRAIGHT)   { unlock_region(3); unlock_region(2); }
-    else                             { unlock_region(0); unlock_region(3); unlock_region(2); }
+    else                              { unlock_region(3); unlock_region(2); unlock_region(0); }
   }
   else if (side == SOUTH)
   {
     if (direction == RIGHT)           { unlock_region(3); }
-    else if (direction == STRAIGHT)   { unlock_region(2); }      // FIX
-    else                             { unlock_region(1); }      // FIX
+    else if (direction == STRAIGHT)   { unlock_region(2); }
+    else                              { unlock_region(1); }
   }
   else if (side == WEST)
   {
     if (direction == RIGHT)           { unlock_region(0); }
     else if (direction == STRAIGHT)   { unlock_region(1); unlock_region(0); }
-    else                             { unlock_region(2); unlock_region(1); unlock_region(0); }
+    else                              { unlock_region(2); unlock_region(1); unlock_region(0); }
   }
 }
 
