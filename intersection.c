@@ -153,7 +153,7 @@ static void* manage_light(void* arg)
   return(0);
 }
 
-sstatic void lock_path(Side side, Direction direction)
+static void lock_path(Side side, Direction direction)
 {
   if (side == NORTH)
   {
