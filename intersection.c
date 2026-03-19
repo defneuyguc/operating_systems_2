@@ -155,66 +155,57 @@ static void* manage_light(void* arg)
 
 static void lock_path(Side side, Direction direction)
 {
-  /*
-   * Fixed global order: always lock regions in increasing order.
-   * This follows the lecture rule for deadlock prevention.
-   */
-
   if (side == NORTH)
   {
-    if (direction == RIGHT)      { lock_region(1); }
-    else if (direction == STRAIGHT) { lock_region(1); lock_region(2); }
-    else                        { lock_region(1); lock_region(2); lock_region(3); }
+    if (direction == RIGHT)           { lock_region(1); }
+    else if (direction == STRAIGHT)   { lock_region(1); lock_region(2); }
+    else                             { lock_region(1); lock_region(2); lock_region(3); }
   }
   else if (side == EAST)
   {
-    if (direction == RIGHT)      { lock_region(2); }
-    else if (direction == STRAIGHT) { lock_region(2); lock_region(3); }
-    else                        { lock_region(0); lock_region(2); lock_region(3); }
+    if (direction == RIGHT)           { lock_region(2); }
+    else if (direction == STRAIGHT)   { lock_region(2); lock_region(3); }
+    else                             { lock_region(2); lock_region(3); lock_region(0); }
   }
   else if (side == SOUTH)
   {
-    if (direction == RIGHT)      { lock_region(3); }
-    else if (direction == STRAIGHT) { lock_region(0); lock_region(3); }
-    else                        { lock_region(0); lock_region(1); lock_region(3); }
+    if (direction == RIGHT)           { lock_region(3); }
+    else if (direction == STRAIGHT)   { lock_region(2); }        // FIX
+    else                             { lock_region(1); }        // FIX
   }
   else if (side == WEST)
   {
-    if (direction == RIGHT)      { lock_region(0); }
-    else if (direction == STRAIGHT) { lock_region(0); lock_region(1); }
-    else                        { lock_region(0); lock_region(1); lock_region(2); }
+    if (direction == RIGHT)           { lock_region(0); }
+    else if (direction == STRAIGHT)   { lock_region(0); lock_region(1); }
+    else                             { lock_region(0); lock_region(1); lock_region(2); }
   }
 }
 
 static void unlock_path(Side side, Direction direction)
 {
-  /*
-   * Unlock the same regions that were locked for this path.
-   */
-
   if (side == NORTH)
   {
-    if (direction == RIGHT)      { unlock_region(1); }
-    else if (direction == STRAIGHT) { unlock_region(2); unlock_region(1); }
-    else                        { unlock_region(3); unlock_region(2); unlock_region(1); }
+    if (direction == RIGHT)           { unlock_region(1); }
+    else if (direction == STRAIGHT)   { unlock_region(2); unlock_region(1); }
+    else                             { unlock_region(3); unlock_region(2); unlock_region(1); }
   }
   else if (side == EAST)
   {
-    if (direction == RIGHT)      { unlock_region(2); }
-    else if (direction == STRAIGHT) { unlock_region(3); unlock_region(2); }
-    else                        { unlock_region(3); unlock_region(2); unlock_region(0); }
+    if (direction == RIGHT)           { unlock_region(2); }
+    else if (direction == STRAIGHT)   { unlock_region(3); unlock_region(2); }
+    else                             { unlock_region(0); unlock_region(3); unlock_region(2); }
   }
   else if (side == SOUTH)
   {
-    if (direction == RIGHT)      { unlock_region(3); }
-    else if (direction == STRAIGHT) { unlock_region(3); unlock_region(0); }
-    else                        { unlock_region(3); unlock_region(1); unlock_region(0); }
+    if (direction == RIGHT)           { unlock_region(3); }
+    else if (direction == STRAIGHT)   { unlock_region(2); }      // FIX
+    else                             { unlock_region(1); }      // FIX
   }
   else if (side == WEST)
   {
-    if (direction == RIGHT)      { unlock_region(0); }
-    else if (direction == STRAIGHT) { unlock_region(1); unlock_region(0); }
-    else                        { unlock_region(2); unlock_region(1); unlock_region(0); }
+    if (direction == RIGHT)           { unlock_region(0); }
+    else if (direction == STRAIGHT)   { unlock_region(1); unlock_region(0); }
+    else                             { unlock_region(2); unlock_region(1); unlock_region(0); }
   }
 }
 
@@ -275,6 +266,9 @@ int main(int argc, char * argv[])
 
   // TODO: wait for all threads to finish
   pthread_join(supplier_thread, NULL);
+
+  /* wait until the simulation end time */
+  sleep_until_arrival(END_TIME);
 
   /* wake up all traffic-light threads so they can exit cleanly */
   for (int side = 0; side < 4; side++)
