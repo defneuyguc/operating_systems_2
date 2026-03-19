@@ -30,15 +30,15 @@ static Arrival curr_arrivals[4][3][20];
 static sem_t semaphores[4][3];
 
 /* 
- * We split the intersection into 4 conflict regions:
+ * we split the intersection into 4 conflict regions:
  *
  *   q[0] = north-west
  *   q[1] = north-east
  *   q[2] = south-east
  *   q[3] = south-west
  *
- * A car locks all regions it will pass through.
- * Cars whose paths do not overlap can then cross simultaneously.
+ * a car locks all regions it will pass through.
+ * cars whose paths do not overlap can then cross simultaneously.
  */
 static pthread_mutex_t quadrant_mutex[4];
 
@@ -69,26 +69,26 @@ static void* supply_arrivals()
   return(0);
 }
 
+// structure used to pass the lane information (side and direction) to each traffic light thread
 typedef struct
 {
   Side side;
   Direction direction;
 } LightInfo;
 
+// locks a single quadrant (conflict region) of the intersection and ensures that no other car can enter this region at the same time
 static void lock_region(int region)
 {
   pthread_mutex_lock(&quadrant_mutex[region]);
 }
 
+// unlocks a previously locked quadrant which allows other cars to use this part of the intersection
 static void unlock_region(int region)
 {
   pthread_mutex_unlock(&quadrant_mutex[region]);
 }
 
-/* 
- * These two functions will be filled in when we do the mutex mapping for 2b.
- * For now, manage_light() will call them.
- */
+// functions that lock and unlock all quadrants required for a cars path
 static void lock_path(Side side, Direction direction);
 static void unlock_path(Side side, Direction direction);
 
@@ -101,28 +101,26 @@ static void* manage_light(void* arg)
 {
   // TODO:
   // while it is not END_TIME yet, repeatedly:
-  //  - wait for an arrival using the semaphore for this traffic light
-  //  - lock the right mutex(es)
-  //  - make the traffic light turn green
-  //  - sleep for CROSS_TIME seconds
-  //  - make the traffic light turn red
-  //  - unlock the right mutex(es)
+  //  - wait for an arrival using the semaphore for this traffic light --> done
+  //  - lock the right mutex(es) --> done
+  //  - make the traffic light turn green --> done
+  //  - sleep for CROSS_TIME seconds --> done
+  //  - make the traffic light turn red --> done
+  //  - unlock the right mutex(es) ---> done
 
+  // extract the side and direction assigned to this traffic light
   LightInfo* light = (LightInfo*) arg;
   Side side = light->side;
   Direction direction = light->direction;
 
-  int next_arrival = 0;
+  int next_arrival = 0;  // index of the next car to process in this lane
 
-  while (1)
+  while (1) // repeatedly
   {
-    /* wait until a car arrives for this lane, or until main wakes us up to stop */
+    // wait until a car arrives or until termination signal is sent
     sem_wait(&semaphores[side][direction]);
 
-    /*
-     * If there is no real car stored at this position, then this wake-up is only
-     * the termination signal. In that case, stop after END_TIME.
-     */
+    // if this is a termination point exit after END_TIME
     if (curr_arrivals[side][direction][next_arrival].id == -1)
     {
       if (get_time_passed() >= END_TIME)
@@ -131,88 +129,95 @@ static void* manage_light(void* arg)
       }
       continue;
     }
-
+    // retrieve the next car for this lane
     Arrival arrival = curr_arrivals[side][direction][next_arrival];
     next_arrival++;
 
-    /* claim the required part(s) of the intersection */
+   // lock all required quadrants for this cars path
     lock_path(side, direction);
 
+   //  allow the car to enter the intersection and print it 
     printf("traffic light %d %d turns green at time %d for car %d\n",
            side, direction, get_time_passed(), arrival.id);
 
+    // simulate the time taken to cross the intersection
     sleep(CROSS_TIME);
 
+    // car has passed so we turn the light red again
     printf("traffic light %d %d turns red at time %d\n",
            side, direction, get_time_passed());
 
-    /* release the required part(s) of the intersection */
+   // release the quadrants so other cars can use them
     unlock_path(side, direction);
   }
 
   return(0);
 }
 
+// locks the quadrants needed for a car based on its side and direction.
+// different movements require different sets of quadrants.
 static void lock_path(Side side, Direction direction)
 {
-  if (side == NORTH)
+  if (side == NORTH) // car enters from north side 
   {
-    if (direction == RIGHT)           { lock_region(1); }
-    else if (direction == STRAIGHT)   { lock_region(1); lock_region(2); }
-    else                              { lock_region(1); lock_region(2); lock_region(3); }
+    if (direction == RIGHT)           { lock_region(1); } // minimal path only needs quadrant one
+    else if (direction == STRAIGHT)   { lock_region(1); lock_region(2); } // going striaght passes thru 2 quadrants
+    else                              { lock_region(1); lock_region(2); lock_region(3); } // left turn is the longest path - 3 quadrants
   }
-  else if (side == EAST)
+  else if (side == EAST) // car enters from east side
   {
-    if (direction == RIGHT)           { lock_region(2); }
-    else if (direction == STRAIGHT)   { lock_region(2); lock_region(3); }
-    else                              { lock_region(0); lock_region(2); lock_region(3); }
+    if (direction == RIGHT)           { lock_region(2); } // right turn only needs quadrant two
+    else if (direction == STRAIGHT)   { lock_region(2); lock_region(3); } // straight movement passes 2 quadrants
+    else                              { lock_region(0); lock_region(2); lock_region(3); } // left turn uses 3 quadrants
   }
-  else if (side == SOUTH)
+  else if (side == SOUTH) // car enters from south side
   {
-    if (direction == RIGHT)           { lock_region(3); }
-    else if (direction == STRAIGHT)   { lock_region(2); }
-    else                              { lock_region(1); }
+    if (direction == RIGHT)           { lock_region(3); } // only needs quadrant 3
+    else if (direction == STRAIGHT)   { lock_region(2); } // only needs quadrant 2
+    else                              { lock_region(1); } // only needs quadrant 1
   }
-  else if (side == WEST)
+  else if (side == WEST) // car enters from west side
   {
-    if (direction == RIGHT)           { lock_region(0); }
-    else if (direction == STRAIGHT)   { lock_region(0); lock_region(1); }
-    else                              { lock_region(0); lock_region(1); lock_region(2); }
+    if (direction == RIGHT)           { lock_region(0); } // right turn only quadrant 0
+    else if (direction == STRAIGHT)   { lock_region(0); lock_region(1); } // straight movement passes 2 quadrants
+    else                              { lock_region(0); lock_region(1); lock_region(2); } // left turn uses 3 quadrants
   }
 }
 
+// unlocks the quadrants in reverse order after the car leaves the intersection.
 static void unlock_path(Side side, Direction direction)
 {
-  if (side == NORTH)
+  if (side == NORTH) // car came from north 
   {
-    if (direction == RIGHT)           { unlock_region(1); }
-    else if (direction == STRAIGHT)   { unlock_region(2); unlock_region(1); }
-    else                              { unlock_region(3); unlock_region(2); unlock_region(1); }
+    if (direction == RIGHT)           { unlock_region(1); } // release quadrant 1 
+    else if (direction == STRAIGHT)   { unlock_region(2); unlock_region(1); } // unlock in reverse order (was 1->2 mow 2->1)
+    else                              { unlock_region(3); unlock_region(2); unlock_region(1); } // release all used quadrants in reverse order
   }
-  else if (side == EAST)
+  else if (side == EAST) // car came from east
   {
-    if (direction == RIGHT)           { unlock_region(2); }
-    else if (direction == STRAIGHT)   { unlock_region(3); unlock_region(2); }
-    else                              { unlock_region(3); unlock_region(2); unlock_region(0); }
+    if (direction == RIGHT)           { unlock_region(2); } // release quadrant 2
+    else if (direction == STRAIGHT)   { unlock_region(3); unlock_region(2); } // unlock in reverse order
+    else                              { unlock_region(3); unlock_region(2); unlock_region(0); } // release all
   }
-  else if (side == SOUTH)
+  else if (side == SOUTH) // car came from south
   {
-    if (direction == RIGHT)           { unlock_region(3); }
-    else if (direction == STRAIGHT)   { unlock_region(2); }
-    else                              { unlock_region(1); }
+    if (direction == RIGHT)           { unlock_region(3); } // release quadrant 3
+    else if (direction == STRAIGHT)   { unlock_region(2); } // release quadrant 2
+    else                              { unlock_region(1); } // release quadrant 1
   }
-  else if (side == WEST)
+  else if (side == WEST) // car came from west
   {
-    if (direction == RIGHT)           { unlock_region(0); }
-    else if (direction == STRAIGHT)   { unlock_region(1); unlock_region(0); }
-    else                              { unlock_region(2); unlock_region(1); unlock_region(0); }
+    if (direction == RIGHT)           { unlock_region(0); } // release quadrant 0
+    else if (direction == STRAIGHT)   { unlock_region(1); unlock_region(0); } // unlock in reverse order
+    else                              { unlock_region(2); unlock_region(1); unlock_region(0); } // release all
   }
 }
+// all quadrants are unlocked in reverse order of locking to maintain consistency and avoid potential synchronization issues
 
 int main(int argc, char * argv[])
 {
   
-  /* mark all curr_arrivals slots as empty */
+  // mark every slot in curr_arrivals as empty by setting id = -1, this helps traffic-light threads detect termination/unused entries.
   for (int i = 0; i < 4; i++)
   {
     for (int j = 0; j < 3; j++)
@@ -233,6 +238,7 @@ int main(int argc, char * argv[])
     }
   }
 
+  // initialize one mutex for each quadrant of the intersection 
   for (int i = 0; i < 4; i++)
   {
     pthread_mutex_init(&quadrant_mutex[i], NULL);
@@ -243,9 +249,11 @@ int main(int argc, char * argv[])
 
   // TODO: create a thread per traffic light that executes manage_light
 
+  // arrays to store the thread ids and lane information of all traffic lights
   pthread_t light_threads[4][3];
   LightInfo light_info[4][3];
 
+  // create one thread per traffic light 
   for (int side = 0; side < 4; side++)
   {
     for (int direction = 0; direction < 3; direction++)
@@ -261,16 +269,20 @@ int main(int argc, char * argv[])
   }
 
   // TODO: create a thread that executes supply_arrivals
-  pthread_t supplier_thread;
+
+  // create the supplier thread that generates arrivals and signals the correct lane
+  pthread_t supplier_thread;   // stores supplier thread ID
   pthread_create(&supplier_thread, NULL, supply_arrivals, NULL);
 
   // TODO: wait for all threads to finish
+
+  // wait until the supplier thread has finished adding all arrivals
   pthread_join(supplier_thread, NULL);
 
-  /* wait until the simulation end time */
+   // wait until the simulation reaches END_TIME
   sleep_until_arrival(END_TIME);
 
-  /* wake up all traffic-light threads so they can exit cleanly */
+  // wake all traffic light threads so blocked threads can exit cleanly
   for (int side = 0; side < 4; side++)
   {
     for (int direction = 0; direction < 3; direction++)
@@ -279,6 +291,7 @@ int main(int argc, char * argv[])
     }
   }
 
+ // wait for all traffic light threads to finish before ending the program
   for (int side = 0; side < 4; side++)
   {
     for (int direction = 0; direction < 3; direction++)
